@@ -9,6 +9,7 @@ enum ActiveSheet: Identifiable {
     case cloneBoard
     case expenses
     case dashboard
+    case calendar
     case view(Ticket)
 
     var id: String {
@@ -19,6 +20,7 @@ enum ActiveSheet: Identifiable {
         case .cloneBoard: return "clone"
         case .expenses: return "expenses"
         case .dashboard: return "dashboard"
+        case .calendar: return "calendar"
         case .view(let t): return "view-\(t.id)"
         }
     }
@@ -69,6 +71,10 @@ struct ContentView: View {
                         .keyboardShortcut("n", modifiers: .command)
                         .help("New ticket (⌘N)")
                     Button {
+                        activeSheet = .calendar
+                    } label: { Label("Calendar", systemImage: "calendar") }
+                        .help("Full calendar view")
+                    Button {
                         activeSheet = .dashboard
                     } label: { Label("Dashboard", systemImage: "chart.bar.xaxis") }
                         .help("Business dashboard")
@@ -102,6 +108,8 @@ struct ContentView: View {
                 ExpensesView()
             case .dashboard:
                 DashboardView(onOpenTicket: { activeSheet = .view($0) })
+            case .calendar:
+                CalendarView(onOpenTicket: { activeSheet = .view($0) })
             case .view(let ticket):
                 QuickViewSheet(ticket: ticket, onEdit: { activeSheet = .edit($0) })
             }

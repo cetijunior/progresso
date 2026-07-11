@@ -494,7 +494,7 @@ final class VaultStore: ObservableObject {
                     }
                 }
             } catch {
-                GCalManager.shared.recordSyncFailure(ticket)
+                GCalManager.shared.recordSyncFailure(ticket, error: error)
             }
         }
     }

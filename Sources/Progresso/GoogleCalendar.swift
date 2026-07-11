@@ -366,17 +366,24 @@ final class GCalManager: ObservableObject {
 
     // MARK: Read: primary-calendar events for the dashboard window
 
+    /// Dashboard's "upcoming" convenience — today through `days` ahead.
     func refreshEvents(days: Int = 14) async {
+        let now = Calendar.current.startOfDay(for: Date())
+        await refreshEvents(from: now, to: now.addingTimeInterval(Double(days) * 86_400))
+    }
+
+    /// The full calendar view fetches whatever month grid is on screen —
+    /// callers pass the range directly instead of "days from now".
+    func refreshEvents(from start: Date, to end: Date) async {
         guard isConnected else { return }
         let f = ISO8601DateFormatter()
-        let now = Calendar.current.startOfDay(for: Date())
         do {
             let json = try await api("GET", "/calendars/primary/events", query: [
                 .init(name: "singleEvents", value: "true"),
                 .init(name: "orderBy", value: "startTime"),
-                .init(name: "timeMin", value: f.string(from: now)),
-                .init(name: "timeMax", value: f.string(from: now.addingTimeInterval(Double(days) * 86_400))),
-                .init(name: "maxResults", value: "100"),
+                .init(name: "timeMin", value: f.string(from: start)),
+                .init(name: "timeMax", value: f.string(from: end)),
+                .init(name: "maxResults", value: "250"),
             ])
             let items = json["items"] as? [[String: Any]] ?? []
             events = items.compactMap { Self.parseEvent($0) }
@@ -451,8 +458,9 @@ final class GCalManager: ObservableObject {
         }
     }
 
-    func recordSyncFailure(_ t: Ticket) {
-        failedSyncs[t.id] = t.title
+    func recordSyncFailure(_ t: Ticket, error: Error) {
+        failedSyncs[t.id] = "\(t.title) — \(error.localizedDescription)"
+        lastError = error.localizedDescription
     }
 
     private func create(_ body: [String: Any]) async throws -> String {
