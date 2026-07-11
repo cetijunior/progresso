@@ -499,12 +499,11 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    /// Tickets on this board that have a date but aren't calendar-synced
-    /// yet — the "Push dates" bulk action's worklist.
+    /// Tickets on this board that aren't calendar-synced yet — the
+    /// "Push to Calendar" bulk action's worklist. Every ticket qualifies:
+    /// dated ones land on their dates, undated ones on their creation day.
     var calendarPushCandidates: [Ticket] {
-        tickets.filter {
-            !$0.gcalSync && ($0.due != nil || $0.filmingDate != nil || $0.publishDate != nil)
-        }
+        tickets.filter { !$0.gcalSync }
     }
 
     /// Bulk opt-in: flip sync on for every dated ticket on the active board.

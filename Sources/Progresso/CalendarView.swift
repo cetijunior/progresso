@@ -57,16 +57,16 @@ struct CalendarView: View {
                 .controlSize(.small)
             Spacer()
             if gcal.isConnected && !store.calendarPushCandidates.isEmpty {
-                Button("Push Dates…") { confirmingBulkPush = true }
+                Button("Push to Calendar…") { confirmingBulkPush = true }
                     .font(.caption)
                     .controlSize(.small)
-                    .help("Create calendar events for every dated ticket on this board")
+                    .help("Create calendar events for every unsynced ticket on this board")
             }
             Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
         .confirmationDialog(
-            "Create Google Calendar events for \(store.calendarPushCandidates.count) dated ticket(s) on this board? They'll stay in sync from then on.",
+            "Create Google Calendar events for \(store.calendarPushCandidates.count) ticket(s) on this board? Dated tickets land on their dates, undated ones on their creation day — and they stay in sync from then on.",
             isPresented: $confirmingBulkPush,
             titleVisibility: .visible
         ) {

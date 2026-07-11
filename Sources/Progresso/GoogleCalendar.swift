@@ -429,10 +429,16 @@ final class GCalManager: ObservableObject {
     /// deletes ONLY events whose IDs we stored — nothing else is touched.
     func syncEvents(for ticket: Ticket) async throws -> Ticket {
         var t = ticket
+        let hasExplicitDates = [t.due, t.filmingDate, t.publishDate]
+            .contains { $0?.isEmpty == false }
         let dates: [(key: String, value: String?, label: String)] = [
             ("due", t.due, "due"),
             ("filming", t.filmingDate, "filming"),
             ("publish", t.publishDate, "publish"),
+            // Undated tickets still get a spot on the calendar — pinned to
+            // their creation day. The slot empties itself (event deleted)
+            // as soon as a real date is set.
+            ("created", hasExplicitDates ? nil : t.created, "created"),
         ]
         for (key, value, label) in dates {
             let existing = t.gcalEventIDs[key]
@@ -482,7 +488,9 @@ final class GCalManager: ObservableObject {
         var description = "Progresso ticket"
         if !t.client.isEmpty { description += " · \(t.client)" }
         return [
-            "summary": "\(t.title) — \(label)",
+            // "created" is an implementation detail — the event is just
+            // the ticket; real deadlines get their label spelled out.
+            "summary": label == "created" ? t.title : "\(t.title) — \(label)",
             "description": description,
             "start": ["date": date],
             "end": ["date": Self.plusOneDay(date)],    // all-day end is exclusive

@@ -37,7 +37,8 @@ enum Frontmatter {
                                       "kind", "contract", "platforms", "deliverable",
                                       "pillar", "assignee", "filming", "publish",
                                       "priority", "links",
-                                      "gcal_sync", "gcal_due", "gcal_filming", "gcal_publish"]
+                                      "gcal_sync", "gcal_due", "gcal_filming", "gcal_publish",
+                                      "gcal_created"]
 
         var extra: [(String, String)] = []
         for (k, v) in dict where !knownKeys.contains(k) {
@@ -73,7 +74,7 @@ enum Frontmatter {
         t.priority = str(dict["priority"]) ?? "normal"
         t.links = tagList(dict["links"])
         t.gcalSync = bool(dict["gcal_sync"]) ?? false
-        for key in ["due", "filming", "publish"] {
+        for key in ["due", "filming", "publish", "created"] {
             if let id = str(dict["gcal_\(key)"]), !id.isEmpty {
                 t.gcalEventIDs[key] = id
             }
@@ -124,7 +125,7 @@ enum Frontmatter {
             lines.append("due: \(due)")
         }
         if t.gcalSync { lines.append("gcal_sync: true") }
-        for key in ["due", "filming", "publish"] {
+        for key in ["due", "filming", "publish", "created"] {
             if let id = t.gcalEventIDs[key], !id.isEmpty {
                 lines.append("gcal_\(key): \(quote(id))")
             }
