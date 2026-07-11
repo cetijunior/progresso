@@ -28,6 +28,7 @@ enum ActiveSheet: Identifiable {
 
 struct ContentView: View {
     @EnvironmentObject var store: VaultStore
+    @AppStorage("sidebarPosition") private var sidebarPosition = "left"
 
     @State private var searchText = ""
     @State private var clientFilter: String?
@@ -35,10 +36,36 @@ struct ContentView: View {
     @State private var payFilter: PayFilter = .all
     @State private var activeSheet: ActiveSheet?
 
+    /// The board area shared by both sidebar layouts.
+    private var boardDetail: some View {
+        VStack(spacing: 0) {
+            PageTabs()
+            BoardView(tickets: filteredTickets,
+                      onEdit: { activeSheet = .edit($0) },
+                      onView: { activeSheet = .view($0) },
+                      onCreate: { activeSheet = .create(inColumn: $0) })
+        }
+        .navigationTitle(store.activeBoard?.name ?? "Board")
+        .navigationSubtitle(subtitle)
+    }
+
     var body: some View {
         Group {
             if store.boards.isEmpty {
                 WelcomeView()
+            } else if sidebarPosition == "right" {
+                // NavigationSplitView can't put its sidebar trailing on
+                // macOS (layout-direction mirroring is ignored), so the
+                // right-hand mode is a plain HSplitView.
+                HSplitView {
+                    boardDetail
+                        .frame(minWidth: 500, maxWidth: .infinity)
+                    SidebarView(clientFilter: $clientFilter,
+                                tagFilter: $tagFilter,
+                                payFilter: $payFilter,
+                                onCloneBoard: { activeSheet = .cloneBoard })
+                        .frame(minWidth: 210, idealWidth: 230, maxWidth: 320)
+                }
             } else {
                 NavigationSplitView {
                     SidebarView(clientFilter: $clientFilter,
@@ -46,15 +73,7 @@ struct ContentView: View {
                                 payFilter: $payFilter,
                                 onCloneBoard: { activeSheet = .cloneBoard })
                 } detail: {
-                    VStack(spacing: 0) {
-                        PageTabs()
-                        BoardView(tickets: filteredTickets,
-                                  onEdit: { activeSheet = .edit($0) },
-                                  onView: { activeSheet = .view($0) },
-                                  onCreate: { activeSheet = .create(inColumn: $0) })
-                    }
-                    .navigationTitle(store.activeBoard?.name ?? "Board")
-                    .navigationSubtitle(subtitle)
+                    boardDetail
                 }
             }
         }

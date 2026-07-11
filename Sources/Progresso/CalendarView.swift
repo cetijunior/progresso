@@ -14,6 +14,7 @@ struct CalendarView: View {
 
     @State private var displayedMonth = Date()
     @State private var selectedDay = Date()
+    @State private var confirmingBulkPush = false
 
     private let calendar = Calendar.current
     private let dayFmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f }()
@@ -55,9 +56,24 @@ struct CalendarView: View {
                 .font(.caption)
                 .controlSize(.small)
             Spacer()
+            if gcal.isConnected && !store.calendarPushCandidates.isEmpty {
+                Button("Push Dates…") { confirmingBulkPush = true }
+                    .font(.caption)
+                    .controlSize(.small)
+                    .help("Create calendar events for every dated ticket on this board")
+            }
             Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
+        .confirmationDialog(
+            "Create Google Calendar events for \(store.calendarPushCandidates.count) dated ticket(s) on this board? They'll stay in sync from then on.",
+            isPresented: $confirmingBulkPush,
+            titleVisibility: .visible
+        ) {
+            Button("Push \(store.calendarPushCandidates.count) to Calendar") {
+                store.pushAllDatesToCalendar()
+            }
+        }
     }
 
     // MARK: Grid
@@ -169,47 +185,87 @@ struct CalendarView: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(Array(tickets.enumerated()), id: \.offset) { _, entry in
-                        let (ticket, label) = entry
-                        Button { onOpenTicket(ticket) } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: ticket.kind.icon)
-                                    .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(ticket.title).font(.callout).lineLimit(2)
-                                    Text(label).font(.caption2).foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        ticketRow(entry.0, label: entry.1, showDate: false)
                     }
                     ForEach(events) { event in
-                        Button {
-                            if let link = event.htmlLink, let url = URL(string: link) {
-                                NSWorkspace.shared.open(url)
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "calendar").foregroundStyle(.blue)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(event.title).font(.callout).lineLimit(2)
-                                    if !event.time.isEmpty {
-                                        Text(event.time).font(.caption2).foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
+                        eventRow(event, showDate: false)
+                    }
+
+                    // What's coming — the practical "glance" half of the
+                    // panel: everything from today forward, nearest first.
+                    Divider().padding(.vertical, 4)
+                    Text("UPCOMING")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                    let coming = upcoming()
+                    if coming.isEmpty {
+                        Text("Nothing ahead. Espresso time.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(coming) { row in
+                        switch row {
+                        case .ticket(let t, _, let label):
+                            ticketRow(t, label: label, showDate: true)
+                        case .event(let e):
+                            eventRow(e, showDate: true)
                         }
-                        .buttonStyle(.plain)
-                        .help("Google Calendar event — opens in the browser")
                     }
                 }
             }
         }
         .padding(14)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func ticketRow(_ ticket: Ticket, label: String, showDate: Bool) -> some View {
+        Button { onOpenTicket(ticket) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: ticket.kind.icon)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ticket.title).font(.callout).lineLimit(2)
+                    Text(showDate ? "\(label) \(dateFor(ticket, label) ?? "")" : label)
+                        .font(.caption2)
+                        .foregroundStyle(isOverdueLabel(ticket, label) ? .red : .secondary)
+                }
+                Spacer(minLength: 0)
+                if !ticket.gcalEventIDs.isEmpty {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                        .help("Synced to Google Calendar")
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func eventRow(_ event: GCalEvent, showDate: Bool) -> some View {
+        Button {
+            if let link = event.htmlLink, let url = URL(string: link) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(event.title).font(.callout).lineLimit(2)
+                    let detail = [showDate ? event.date : "", event.time]
+                        .filter { !$0.isEmpty }.joined(separator: " ")
+                    if !detail.isEmpty {
+                        Text(detail).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Google Calendar event — opens in the browser")
     }
 
     // MARK: Data
@@ -239,6 +295,52 @@ struct CalendarView: View {
     private var gridStart: Date { monthDays.first ?? displayedMonth }
     private var gridEnd: Date {
         calendar.date(byAdding: .day, value: 1, to: monthDays.last ?? displayedMonth) ?? displayedMonth
+    }
+
+    private enum UpcomingRow: Identifiable {
+        case ticket(Ticket, date: String, label: String)
+        case event(GCalEvent)
+        var id: String {
+            switch self {
+            case .ticket(let t, _, let label): return "t-\(t.id)-\(label)"
+            case .event(let e): return "e-\(e.id)"
+            }
+        }
+        var sortKey: String {
+            switch self {
+            case .ticket(_, let date, _): return date
+            case .event(let e): return "\(e.date) \(e.time)"
+            }
+        }
+    }
+
+    /// Everything from today forward, nearest first: all ticket dates on
+    /// this board plus foreign events from the loaded calendar window.
+    private func upcoming(limit: Int = 10) -> [UpcomingRow] {
+        let today = Ticket.today()
+        var rows: [UpcomingRow] = []
+        for t in store.tickets {
+            if let d = t.due, d >= today { rows.append(.ticket(t, date: d, label: "due")) }
+            if let d = t.filmingDate, d >= today { rows.append(.ticket(t, date: d, label: "filming")) }
+            if let d = t.publishDate, d >= today { rows.append(.ticket(t, date: d, label: "publish")) }
+        }
+        rows += gcal.events
+            .filter { $0.date >= today && !$0.isProgresso }
+            .map { .event($0) }
+        return Array(rows.sorted { $0.sortKey < $1.sortKey }.prefix(limit))
+    }
+
+    private func dateFor(_ t: Ticket, _ label: String) -> String? {
+        switch label {
+        case "due": return t.due
+        case "filming": return t.filmingDate
+        case "publish": return t.publishDate
+        default: return nil
+        }
+    }
+
+    private func isOverdueLabel(_ t: Ticket, _ label: String) -> Bool {
+        label == "due" && t.isOverdue
     }
 
     private func items(for day: Date) -> (tickets: [(Ticket, String)], events: [GCalEvent]) {

@@ -499,6 +499,25 @@ final class VaultStore: ObservableObject {
         }
     }
 
+    /// Tickets on this board that have a date but aren't calendar-synced
+    /// yet — the "Push dates" bulk action's worklist.
+    var calendarPushCandidates: [Ticket] {
+        tickets.filter {
+            !$0.gcalSync && ($0.due != nil || $0.filmingDate != nil || $0.publishDate != nil)
+        }
+    }
+
+    /// Bulk opt-in: flip sync on for every dated ticket on the active board.
+    /// Each save triggers the normal non-blocking push, so failures land in
+    /// the usual sidebar retry indicator rather than aborting the batch.
+    func pushAllDatesToCalendar() {
+        guard GCalManager.shared.isConnected else { return }
+        for var t in calendarPushCandidates {
+            t.gcalSync = true
+            save(t)
+        }
+    }
+
     func retryCalendarSyncs() {
         for id in GCalManager.shared.failedSyncs.keys {
             if let t = tickets.first(where: { $0.id == id }) {

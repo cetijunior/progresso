@@ -229,6 +229,7 @@ struct QuickAddView: View {
 struct SettingsView: View {
     @EnvironmentObject var store: VaultStore
     @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("sidebarPosition") private var sidebarPosition = "left"
     @AppStorage("defaultCurrency") private var defaultCurrency = "EUR"
     @AppStorage("launchBoardID") private var launchBoardID = ""
     @AppStorage("menuBarQuickAdd") private var menuBarQuickAdd = true
@@ -249,6 +250,11 @@ struct SettingsView: View {
                 .onChange(of: appearanceMode) { _, newValue in
                     Appearance.apply(newValue)
                 }
+                Picker("Sidebar position", selection: $sidebarPosition) {
+                    Text("Left").tag("left")
+                    Text("Right").tag("right")
+                }
+                .pickerStyle(.segmented)
             }
 
             Section("General") {
