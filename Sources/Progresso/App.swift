@@ -233,6 +233,9 @@ struct SettingsView: View {
     @AppStorage("launchBoardID") private var launchBoardID = ""
     @AppStorage("menuBarQuickAdd") private var menuBarQuickAdd = true
     @AppStorage("liveSync") private var liveSync = true
+    @AppStorage("gcalClientID") private var gcalClientID = ""
+    @AppStorage("gcalClientSecret") private var gcalClientSecret = ""
+    @ObservedObject private var gcal = GCalManager.shared
 
     var body: some View {
         Form {
@@ -270,6 +273,36 @@ struct SettingsView: View {
 
             Section("Menu bar") {
                 Toggle("Show quick-add in the menu bar", isOn: $menuBarQuickAdd)
+            }
+
+            Section("Google Calendar") {
+                if gcal.isConnected {
+                    LabeledContent("Status") {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Button("Disconnect") { gcal.disconnect() }
+                    Text("Disconnecting stops syncing; events already on your calendar stay put.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    TextField("OAuth client ID", text: $gcalClientID)
+                    TextField("OAuth client secret", text: $gcalClientSecret)
+                    HStack {
+                        Button(gcal.isConnecting ? "Waiting for browser…" : "Connect Google Calendar…") {
+                            Task { await gcal.connect() }
+                        }
+                        .disabled(gcalClientID.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || gcal.isConnecting)
+                        if gcal.isConnecting { ProgressView().controlSize(.small) }
+                    }
+                    if let err = gcal.lastError {
+                        Text(err).font(.caption).foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text("Google Cloud Console → enable the Calendar API → Credentials → OAuth client ID, type “Desktop app”. Paste both values above, then Connect. Tokens live in your Keychain.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Text("Boards and tickets are markdown files in your vault — settings only change how this app behaves.")

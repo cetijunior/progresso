@@ -5,7 +5,28 @@ struct DashboardView: View {
     @EnvironmentObject var store: VaultStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @ObservedObject private var gcal = GCalManager.shared
     let onOpenTicket: (Ticket) -> Void
+
+    /// One merged schedule: ticket dates + foreign Google Calendar events.
+    /// Events Progresso created are hidden here — their tickets already
+    /// appear as rows (with a blue calendar badge marking them as synced).
+    private enum ScheduleRow: Identifiable {
+        case ticket(Ticket, date: String, label: String)
+        case event(GCalEvent)
+        var id: String {
+            switch self {
+            case .ticket(let t, _, let label): return "t-\(t.id)-\(label)"
+            case .event(let e): return "e-\(e.id)"
+            }
+        }
+        var sortKey: String {
+            switch self {
+            case .ticket(_, let date, _): return date
+            case .event(let e): return "\(e.date) \(e.time)"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,28 +79,24 @@ struct DashboardView: View {
                         }
                     }
 
-                    // Deadlines
+                    // Schedule: ticket dates + Google Calendar, one list
                     section("Upcoming (14 days) & overdue") {
-                        let items = deadlineItems()
-                        if items.isEmpty {
+                        if !gcal.isConnected {
+                            Label("Google Calendar not connected — Settings (⌘,) to see events here.",
+                                  systemImage: "calendar.badge.exclamationmark")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        } else if let err = gcal.lastError {
+                            Label(err, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        let rows = scheduleRows()
+                        if rows.isEmpty {
                             Text("Nothing due. Breathe.").foregroundStyle(.secondary).font(.callout)
                         }
-                        ForEach(items.prefix(10), id: \.0.id) { ticket, date, label in
-                            Button {
-                                onOpenTicket(ticket)
-                            } label: {
-                                HStack {
-                                    Image(systemName: ticket.kind.icon)
-                                        .foregroundStyle(.secondary)
-                                    Text(ticket.title).lineLimit(1)
-                                    Spacer()
-                                    Text("\(label) \(date)")
-                                        .font(.caption)
-                                        .foregroundStyle(date < Ticket.today() ? .red : .secondary)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
+                        ForEach(rows.prefix(14)) { row in
+                            scheduleRowView(row)
                         }
                     }
                 }
@@ -87,9 +104,63 @@ struct DashboardView: View {
             }
         }
         .frame(width: 620, height: 560)
+        .task { await gcal.refreshEvents() }
         // .keyboardShortcut(.cancelAction) alone doesn't receive Escape in
         // these sheets (found in the 2026-07-10 gauntlet) — wire it explicitly.
         .onExitCommand { dismiss() }
+    }
+
+    private func scheduleRows() -> [ScheduleRow] {
+        var rows: [ScheduleRow] = deadlineItems().map { .ticket($0.0, date: $0.1, label: $0.2) }
+        rows += gcal.events.filter { !$0.isProgresso }.map { .event($0) }
+        return rows.sorted { $0.sortKey < $1.sortKey }
+    }
+
+    @ViewBuilder
+    private func scheduleRowView(_ row: ScheduleRow) -> some View {
+        switch row {
+        case .ticket(let ticket, let date, let label):
+            Button {
+                onOpenTicket(ticket)
+            } label: {
+                HStack {
+                    Image(systemName: ticket.kind.icon)
+                        .foregroundStyle(.secondary)
+                    Text(ticket.title).lineLimit(1)
+                    if !ticket.gcalEventIDs.isEmpty {
+                        Image(systemName: "calendar.badge.checkmark")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                            .help("Synced to Google Calendar")
+                    }
+                    Spacer()
+                    Text("\(label) \(date)")
+                        .font(.caption)
+                        .foregroundStyle(date < Ticket.today() ? .red : .secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        case .event(let event):
+            Button {
+                if let link = event.htmlLink, let url = URL(string: link) {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "calendar")
+                        .foregroundStyle(.blue)
+                    Text(event.title).lineLimit(1)
+                    Spacer()
+                    Text(event.time.isEmpty ? event.date : "\(event.date) \(event.time)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Google Calendar event — opens in the browser")
+        }
     }
 
     /// (ticket, date, kind-of-date) for due/publish/filming within 14 days or past due.

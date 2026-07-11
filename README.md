@@ -41,6 +41,11 @@ same data, updated live.
 - **Expense log** — money out lives next to money in, per board.
 - **Menu-bar quick add** — capture a client job, content idea, or task into any board
   without switching apps.
+- **Google Calendar (optional)** — see your primary calendar's events next to ticket
+  deadlines on the dashboard, and push ticket dates (due / filming / publish) to the
+  calendar with a per-ticket toggle. Edits patch the same event, deleting the ticket
+  removes it, and events Progresso didn't create are never touched. OAuth (PKCE,
+  loopback) with your own Google Cloud client ID; tokens live in the Keychain.
 - **Light & dark**, drag & drop, per-board custom columns, search, client/tag filters.
 
 ## Install / build

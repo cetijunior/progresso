@@ -170,6 +170,7 @@ struct WelcomeView: View {
 
 struct SidebarView: View {
     @EnvironmentObject var store: VaultStore
+    @ObservedObject private var gcal = GCalManager.shared
     @Binding var clientFilter: String?
     @Binding var tagFilter: Set<String>
     @Binding var payFilter: PayFilter
@@ -228,6 +229,23 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+
+                // Calendar pushes that didn't go through — non-blocking,
+                // but visible, with a one-click retry.
+                if !gcal.failedSyncs.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text("\(gcal.failedSyncs.count) calendar sync\(gcal.failedSyncs.count == 1 ? "" : "s") failed")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .help(gcal.failedSyncs.values.joined(separator: "\n"))
+                        Spacer()
+                        Button("Retry") { store.retryCalendarSyncs() }
+                            .font(.caption2)
+                            .controlSize(.small)
+                    }
+                }
 
                 if store.syncState != .notGit {
                     HStack(spacing: 6) {

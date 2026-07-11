@@ -35,6 +35,8 @@ struct TicketEditorView: View {
     @State private var hasPublish: Bool
     @State private var publishDate: Date
     @State private var notes: String
+    @State private var gcalSync: Bool
+    @ObservedObject private var gcal = GCalManager.shared
 
     @FocusState private var focusedField: Field?
     private enum Field { case title }
@@ -63,6 +65,7 @@ struct TicketEditorView: View {
         _tagsText = State(initialValue: ticket.tags.joined(separator: ", "))
         _linksText = State(initialValue: ticket.links.joined(separator: ", "))
         _notes = State(initialValue: ticket.notes)
+        _gcalSync = State(initialValue: ticket.gcalSync)
 
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -232,6 +235,24 @@ struct TicketEditorView: View {
                         TextField("https://… , https://… (comma-separated)", text: $linksText)
                             .textFieldStyle(.roundedBorder)
                     }
+                    row("Calendar") {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Toggle("Sync dates to Google Calendar", isOn: $gcalSync)
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .disabled(!gcal.isConnected && !gcalSync)
+                            if !gcal.isConnected {
+                                Text("Connect in Settings (⌘,) → Google Calendar")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            } else if gcalSync {
+                                Text("Due, filming, and publish dates become all-day events; edits update them, deleting the ticket removes them.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(kind == .content ? "SCRIPT / NOTES" : "NOTES")
@@ -345,6 +366,7 @@ struct TicketEditorView: View {
         t.due = (hasDue && kind != .content) ? f.string(from: dueDate) : nil
         t.filmingDate = (hasFilming && kind == .content) ? f.string(from: filmingDate) : nil
         t.publishDate = (hasPublish && kind == .content) ? f.string(from: publishDate) : nil
+        t.gcalSync = gcalSync   // event IDs ride along from `original`
         t.notes = notes
         store.save(t)
         dismiss()

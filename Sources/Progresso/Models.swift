@@ -67,6 +67,11 @@ struct Ticket: Identifiable, Equatable {
     var publishDate: String?           // content, yyyy-MM-dd
     var priority: String = "normal"    // task: low / normal / high
     var links: [String] = []           // any kind: URLs (footage, drafts, docs)
+    // Google Calendar sync (opt-in per ticket). gcalEventIDs maps date kind
+    // ("due"/"filming"/"publish") → the event we created, so edits patch
+    // instead of duplicating and removal deletes only our own events.
+    var gcalSync: Bool = false
+    var gcalEventIDs: [String: String] = [:]
     // Unknown frontmatter keys (from Obsidian/LLM edits) preserved on save.
     var extra: [(key: String, value: String)] = []
 
@@ -85,6 +90,7 @@ struct Ticket: Identifiable, Equatable {
         && lhs.pillar == rhs.pillar && lhs.assignee == rhs.assignee
         && lhs.filmingDate == rhs.filmingDate && lhs.publishDate == rhs.publishDate
         && lhs.priority == rhs.priority && lhs.links == rhs.links
+        && lhs.gcalSync == rhs.gcalSync && lhs.gcalEventIDs == rhs.gcalEventIDs
         && lhs.extra.map(\.key) == rhs.extra.map(\.key)
         && lhs.extra.map(\.value) == rhs.extra.map(\.value)
     }

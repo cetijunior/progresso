@@ -468,8 +468,44 @@ final class VaultStore: ObservableObject {
                 tickets.insert(t, at: 0)
             }
             gitSyncSoon(t.title)
+            calendarSyncSoon(t)
         } catch {
             lastError = "Could not save '\(t.title)': \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Google Calendar push (never blocks saving — the file is
+    // already on disk; a failed push only lights the sidebar indicator)
+
+    func calendarSyncSoon(_ ticket: Ticket) {
+        // Worth a network call only if sync is on, or was on (stale events
+        // to clean up after the toggle went off / dates were removed).
+        guard ticket.gcalSync || !ticket.gcalEventIDs.isEmpty else { return }
+        guard GCalManager.shared.isConnected else { return }
+        Task { @MainActor in
+            do {
+                let updated = try await GCalManager.shared.syncEvents(for: ticket)
+                // Persist newly learned event IDs (direct write — not save(),
+                // which would loop back here).
+                if updated.gcalEventIDs != ticket.gcalEventIDs, let url = updated.fileURL {
+                    try? Frontmatter.serialize(updated).write(to: url, atomically: true, encoding: .utf8)
+                    if let idx = tickets.firstIndex(where: { $0.id == updated.id }) {
+                        tickets[idx] = updated
+                    }
+                }
+            } catch {
+                GCalManager.shared.recordSyncFailure(ticket)
+            }
+        }
+    }
+
+    func retryCalendarSyncs() {
+        for id in GCalManager.shared.failedSyncs.keys {
+            if let t = tickets.first(where: { $0.id == id }) {
+                calendarSyncSoon(t)
+            } else {
+                GCalManager.shared.failedSyncs.removeValue(forKey: id)
+            }
         }
     }
 
@@ -483,6 +519,10 @@ final class VaultStore: ObservableObject {
         }
         tickets.removeAll { $0.id == ticket.id }
         gitSyncSoon("remove \(ticket.title)")
+        if !ticket.gcalEventIDs.isEmpty {
+            let ids = Array(ticket.gcalEventIDs.values)
+            Task { await GCalManager.shared.deleteEvents(ids: ids) }
+        }
     }
 
     func moveTicket(id: String, toColumn columnID: String) {
