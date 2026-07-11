@@ -284,7 +284,8 @@ struct SettingsView: View {
             Section("Google Calendar") {
                 if gcal.isConnected {
                     LabeledContent("Status") {
-                        Label("Connected", systemImage: "checkmark.circle.fill")
+                        Label(gcal.accountEmail.map { "Connected — \($0)" } ?? "Connected",
+                              systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     }
                     Button("Disconnect") { gcal.disconnect() }

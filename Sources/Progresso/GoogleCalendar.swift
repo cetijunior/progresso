@@ -195,6 +195,10 @@ final class GCalManager: ObservableObject {
     @Published var isConnecting = false
     @Published var events: [GCalEvent] = []
     @Published var lastError: String?
+    /// Which Google account granted access — the primary calendar's title
+    /// IS the account email. Surfaced in Settings so "wrong account"
+    /// mistakes are visible instead of silent.
+    @Published var accountEmail: String?
     /// Tickets whose last push failed — sidebar shows a retry affordance.
     @Published var failedSyncs: [String: String] = [:]   // ticket id → ticket title
 
@@ -207,6 +211,7 @@ final class GCalManager: ObservableObject {
            let stored = try? JSONDecoder().decode(GoogleTokens.self, from: data) {
             tokens = stored
             isConnected = true
+            Task { await refreshEvents(days: 1) }   // populates accountEmail
         }
     }
 
@@ -275,6 +280,7 @@ final class GCalManager: ObservableObject {
         events = []
         failedSyncs = [:]
         lastError = nil
+        accountEmail = nil
     }
 
     private func store(_ t: GoogleTokens) {
@@ -387,6 +393,7 @@ final class GCalManager: ObservableObject {
             ])
             let items = json["items"] as? [[String: Any]] ?? []
             events = items.compactMap { Self.parseEvent($0) }
+            accountEmail = json["summary"] as? String
             lastError = nil
         } catch {
             lastError = error.localizedDescription
