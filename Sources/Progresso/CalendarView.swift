@@ -335,12 +335,20 @@ struct CalendarView: View {
         case "due": return t.due
         case "filming": return t.filmingDate
         case "publish": return t.publishDate
+        case "created": return t.created
         default: return nil
         }
     }
 
     private func isOverdueLabel(_ t: Ticket, _ label: String) -> Bool {
         label == "due" && t.isOverdue
+    }
+
+    /// Undated tickets appear on their creation day — mirroring exactly
+    /// where their Google Calendar events live, so both calendars agree.
+    private func isUndated(_ t: Ticket) -> Bool {
+        (t.due?.isEmpty ?? true) && (t.filmingDate?.isEmpty ?? true)
+            && (t.publishDate?.isEmpty ?? true)
     }
 
     private func items(for day: Date) -> (tickets: [(Ticket, String)], events: [GCalEvent]) {
@@ -350,6 +358,7 @@ struct CalendarView: View {
             if t.due == key { tickets.append((t, "due")) }
             if t.filmingDate == key { tickets.append((t, "filming")) }
             if t.publishDate == key { tickets.append((t, "publish")) }
+            if isUndated(t), t.created == key { tickets.append((t, "created")) }
         }
         let events = gcal.events.filter { $0.date == key && !$0.isProgresso }
         return (tickets, events)
@@ -357,8 +366,11 @@ struct CalendarView: View {
 
     private func dotColors(for key: String) -> [Color] {
         var colors: [Color] = []
-        for t in store.tickets where t.due == key || t.filmingDate == key || t.publishDate == key {
-            colors.append(dotColor(for: t))
+        for t in store.tickets {
+            if t.due == key || t.filmingDate == key || t.publishDate == key
+                || (isUndated(t) && t.created == key) {
+                colors.append(dotColor(for: t))
+            }
         }
         colors += gcal.events.filter { $0.date == key && !$0.isProgresso }.map { _ in Color.blue }
         return colors
